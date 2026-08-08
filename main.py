@@ -23,8 +23,8 @@ def build_parser():
     p_split.add_argument("-p", "--pages", help="指定页，如 1,3,5")
     p_split.add_argument("-o", "--output", help="输出目录")
 
-    p_merge = sub.add_parser("merge", help="合并PDF")
-    p_merge.add_argument("files", nargs="+")
+    p_merge = sub.add_parser("merge", help="合并PDF(不跟文件时打开交互界面调整顺序)")
+    p_merge.add_argument("files", nargs="*")
     p_merge.add_argument("-o", "--output", default="merged.pdf")
 
     p_del = sub.add_parser("delete", help="删除指定页码")
@@ -58,8 +58,11 @@ def main():
             pdf_split.split_pdf(args.pdf, args.output, mode="single")
 
     elif args.command == "merge":
-        merge_pdfs.merge_pdfs(args.files, args.output)
-        print(f"已保存: {args.output} (共 {len(args.files)} 个PDF)")
+        if not args.files:
+            merge_pdfs.merge_gui()
+        else:
+            merge_pdfs.merge_pdfs(args.files, args.output)
+            print(f"已保存: {args.output} (共 {len(args.files)} 个PDF)")
 
     elif args.command == "delete":
         pages = set()
