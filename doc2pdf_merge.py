@@ -7,6 +7,11 @@
 order.txt 每行一个文件名，支持 # 注释和空行。
 相对路径相对于 order.txt 所在目录解析。
 清单里也可以直接写已有的 .pdf 文件（跳过转换，直接拼接）。
+
+转换后端按平台选择：
+- Windows: Microsoft Word COM（需安装 MS Word），通过 pywin32 调用
+- macOS:   AppleScript 调用 Microsoft Word（保持原有实现）
+最终拼接统一使用 pypdf（不再依赖 Ghostscript）。
 """
 
 import argparse
@@ -15,6 +20,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+from pypdf import PdfWriter
 
 WORD_APPLESCRIPT = """
 on run argv
@@ -30,20 +37,73 @@ end run
 """
 
 
-def convert_to_pdf(doc_path, pdf_path):
+def _word_com_convert(doc_path, pdf_path):
+    """Windows: 通过 Word COM 接口把 doc/docx 另存为 PDF。"""
+    try:
+        import pythoncom
+        import win32com.client
+    except ImportError as exc:
+        raise RuntimeError(
+            "缺少 pywin32（Word COM 需要）。请执行: pip install pywin32"
+        ) from exc
+
+    pythoncom.CoInitialize()
+    word = None
+    try:
+        word = win32com.client.DispatchEx("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = 0  # wdAlertsNone
+        doc = word.Documents.Open(str(doc_path), ReadOnly=True)
+        try:
+            # wdFormatPDF = 17
+            doc.SaveAs(str(pdf_path), FileFormat=17)
+        finally:
+            doc.Close(False)
+    except Exception as exc:
+        raise RuntimeError(f"Word 转换失败: {doc_path}\n{exc}") from exc
+    finally:
+        if word is not None:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+        pythoncom.CoUninitialize()
+
+    if not os.path.exists(pdf_path):
+        raise RuntimeError(f"转换失败（未生成输出文件）: {doc_path}")
+
+
+def _word_applescript_convert(doc_path, pdf_path):
+    """macOS: 通过 AppleScript 调用 Word 另存为 PDF。"""
     cmd = ["osascript", "-e", WORD_APPLESCRIPT, doc_path, pdf_path]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0 or not os.path.exists(pdf_path):
         raise RuntimeError(f"转换失败: {doc_path}\n{proc.stderr}")
 
 
+def convert_to_pdf(doc_path, pdf_path):
+    if sys.platform.startswith("win"):
+        _word_com_convert(doc_path, pdf_path)
+    elif sys.platform == "darwin":
+        _word_applescript_convert(doc_path, pdf_path)
+    else:
+        raise RuntimeError(
+            "当前系统不支持 doc 自动转 PDF，请手动转好后在清单里写 .pdf 文件。"
+        )
+
+
 def merge_pdfs(pdf_files, out_pdf):
-    cmd = ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER",
-           "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.5",
-           "-sOutputFile=" + out_pdf] + pdf_files
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"合并失败: {proc.stderr}")
+    """用 pypdf 按顺序拼接 PDF（跨平台，替代原来的 Ghostscript）。"""
+    writer = PdfWriter()
+    for f in pdf_files:
+        writer.append(f)
+    try:
+        with open(out_pdf, "wb") as fh:
+            writer.write(fh)
+    finally:
+        writer.close()
+    if not os.path.exists(out_pdf):
+        raise RuntimeError("合并失败：未生成输出文件")
 
 
 def doc2pdf_merge(list_file, output):

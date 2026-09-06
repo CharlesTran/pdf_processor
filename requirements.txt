@@ -1,0 +1,5 @@
+# PDF 处理工具运行依赖
+pypdf>=4.0
+
+# doc2pdf（Word COM）在 Windows 上需要 pywin32；macOS/Linux 无需安装
+pywin32>=306; platform_system == "Windows"

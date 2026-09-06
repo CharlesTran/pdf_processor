@@ -60,10 +60,10 @@ def delete_pages(pdf_path, pages_to_delete, output_path):
 
 def main():
     parser = argparse.ArgumentParser(description="删除PDF指定页码")
-    parser.add_argument("--pdf", default="/Users/chaoaikulipa/Downloads/chufen/万祥镇.pdf",help="PDF文件路径")
-    parser.add_argument("-d", "--delete", default="2,6,20,22",help="要删除的页码，如 3,5 或 2-4")
+    parser.add_argument("pdf", help="PDF文件路径")
+    parser.add_argument("-d", "--delete", help="要删除的页码，如 3,5 或 2-4")
     parser.add_argument("-r", "--range", help="要删除的页码范围，如 2-4")
-    parser.add_argument("-o", "--output", default="/Users/chaoaikulipa/Downloads/chufen/万祥镇1.pdf", help="输出路径（默认 <原名>_删除后.pdf）")
+    parser.add_argument("-o", "--output", help="输出路径（默认 <原名>_删除后.pdf）")
     args = parser.parse_args()
 
     if not os.path.exists(args.pdf):
