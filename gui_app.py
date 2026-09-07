@@ -261,6 +261,29 @@ class PdfToolApp(tk.Tk):
                  "不勾选：每份单独转成一个 PDF 放到输出目录。",
             foreground="#666").pack(anchor="w", pady=(0, 4))
 
+        engine_row = ttk.Frame(tab)
+        engine_row.pack(fill="x", pady=(0, 2))
+        ttk.Label(engine_row, text="转换方式", width=12).pack(side="left")
+        self.doc_engine_key = tk.StringVar(value="auto")
+        self.doc_engine_choices = [
+            ("auto", "自动（本机自动选择）"),
+            ("word", "Microsoft Word"),
+            ("libreoffice", "LibreOffice（无需 Office/WPS）"),
+        ]
+        combo = ttk.Combobox(
+            engine_row, state="readonly", width=30,
+            values=[d for _, d in self.doc_engine_choices])
+        combo.current(0)
+        combo.pack(side="left")
+        self._doc_engine_combo = combo
+        combo.bind("<<ComboboxSelected>>", self._on_doc_engine_changed)
+        ttk.Label(
+            tab,
+            text="自动：优先用本机 Word(2010+)；没有则用 LibreOffice"
+                 "（可安装，或把便携版放到本程序目录的 libreoffice 文件夹）。"
+                 "两者都没有时，程序会给出安装指引。",
+            foreground="#666").pack(anchor="w", pady=(0, 4))
+
         self.doc_out = tk.StringVar()
         self.doc_out_row = self._file_row(
             tab, "输出文件", self.doc_out, PDF_TYPES, "另存为…",
@@ -359,6 +382,11 @@ class PdfToolApp(tk.Tk):
         merged = self.doc_merge.get()
         self._set_row_enabled(self.doc_out_row, merged)
         self._set_row_enabled(self.doc_outdir_row, not merged)
+
+    def _on_doc_engine_changed(self, _event=None):
+        idx = self._doc_engine_combo.current()
+        if 0 <= idx < len(self.doc_engine_choices):
+            self.doc_engine_key.set(self.doc_engine_choices[idx][0])
 
     def _set_row_enabled(self, row, enabled):
         state = "normal" if enabled else "disabled"
@@ -617,13 +645,15 @@ class PdfToolApp(tk.Tk):
             return
         first_dir = os.path.dirname(os.path.abspath(files[0]))
         merged = self.doc_merge.get()
+        engine = self.doc_engine_key.get() or "auto"
         if merged:
             out = self.doc_out.get().strip()
             if not out:
                 out = os.path.join(first_dir, "merged.pdf")
 
             def job():
-                doc2pdf_merge.doc2pdf_files(files, out, merge=True)
+                doc2pdf_merge.doc2pdf_files(files, out, merge=True,
+                                            engine=engine)
                 print(f"已保存: {out}")
         else:
             out_dir = self.doc_outdir.get().strip()
@@ -631,7 +661,8 @@ class PdfToolApp(tk.Tk):
                 out_dir = os.path.join(first_dir, "转换结果")
 
             def job():
-                doc2pdf_merge.doc2pdf_files(files, out_dir, merge=False)
+                doc2pdf_merge.doc2pdf_files(files, out_dir, merge=False,
+                                            engine=engine)
         self._start(job)
 
     def _run_a4(self):

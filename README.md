@@ -35,8 +35,11 @@
 
 也可以在 Actions 页面手动触发（Run workflow → 分支选 main）。
 
-> 说明：doc转PDF 功能在 Windows 上通过 Word 的 COM 接口转换，
-> 运行该功能需要目标电脑安装 **Microsoft Word**。
+> 说明：doc转PDF **不强制依赖 Office/WPS**。自动按可用性选择引擎：
+> Word(2010+) → LibreOffice；都没有时会弹出安装指引。
+> 推荐装 LibreOffice（免费开源、支持 .doc/.docx，下载
+> https://www.libreoffice.org/ ），或把便携版放到程序目录 `libreoffice/` 下。
+> Office 2007 用户注意：2007 不自带“另存为PDF”，需装官方插件或改用 LibreOffice。
 > 其余四个功能（拆分/合并/删除页/转A4）不依赖任何外部软件。
 
 > **Windows 7 兼容版**：默认 exe 用 Python 3.11 构建，最低要求 Windows 8.1。
@@ -87,7 +90,7 @@ pdf_processor/
 ├── pdf_split.py             # 拆分模块
 ├── merge_pdfs.py            # 合并模块（含顺序调整 GUI 逻辑）
 ├── pdf_delete_pages.py      # 删除页码模块
-├── doc2pdf_merge.py         # doc/docx 转 PDF 并拼接（Windows: Word COM）
+├── doc2pdf_merge.py         # doc/docx 转 PDF 并拼接（Word/LibreOffice 引擎）
 ├── pdf_to_a4.py             # PDF 批量标准化为 A4
 ├── requirements.txt         # 运行依赖（pypdf；Windows 额外 pywin32）
 ├── pdf_tool.spec            # Windows PyInstaller 打包配置（8.1+）
@@ -111,8 +114,10 @@ pdf_processor/
 pip install -r requirements.txt
 ```
 
-- doc转PDF 需要本机安装 Microsoft Word（Windows 走 COM；
-  macOS 走 AppleScript，两种平台都无需再装 Ghostscript）
+- doc转PDF **不强制依赖 Office/WPS**。转换引擎按可用性自动选择：
+  Word(2010+) → LibreOffice（安装版或程序目录 `libreoffice/` 下的便携版）；
+  两者都没有时程序会给出安装指引（推荐装 LibreOffice，免费且支持 .doc/.docx）。
+  可用 `--engine auto|word|libreoffice` 强制指定。
 
 ## 命令行用法（跨平台）
 
@@ -170,13 +175,16 @@ python main.py doc2pdf <清单文件> <输出目录> --no-merge
 
 清单文件（如 `order.txt`）每行一个文件名，按行顺序处理；空行与
 `#` 开头的注释行忽略；相对路径相对于清单所在目录；`.pdf` 文件直接使用，
-其余按 Word 文档处理（需要本机安装 Word）。
+其余（doc/docx）按所选引擎转换（见上“环境要求”，默认自动选择，
+也可 `--engine word|libreoffice` 强制指定）。
 
 > GUI 版“doc转PDF”页**无需清单文件**：直接“添加文件…”多选 pdf/doc/docx，
 > 在列表里用上下按钮调整顺序即可（合并顺序=列表顺序）。
 > 需要复用以前的清单时可点“从清单导入…”。另有“是否合并成一个文件”
 > 复选框：勾选输出单个 PDF，不勾选则每份文档单独输出到“转换结果”目录
-> （重名文件自动追加 `_2/_3…` 避免覆盖）。
+> （重名文件自动追加 `_2/_3…` 避免覆盖）。页内有“转换方式”下拉框：
+> 自动 / Microsoft Word / LibreOffice——不装 Office/WPS 也能转
+> （LibreOffice 免费，或把便携版放到程序目录 `libreoffice/` 下）。
 
 ### 5. 批量标准化为 A4（a4）
 

@@ -40,6 +40,9 @@ def build_parser():
                        help="合并时输出pdf路径；--no-merge时为输出目录")
     p_doc.add_argument("--no-merge", action="store_true",
                        help="不合并，每份文档单独转成 PDF 输出到目录")
+    p_doc.add_argument("--engine", choices=["auto", "word", "libreoffice"],
+                       default="auto",
+                       help="转换引擎：auto(默认) / word / libreoffice")
 
     p_a4 = sub.add_parser("a4", help="批量将PDF页面等比缩放、居中到标准A4")
     p_a4.add_argument("input_dir", nargs="?", help="PDF目录（不传则使用当前目录）")
@@ -89,7 +92,8 @@ def main():
     elif args.command == "doc2pdf":
         try:
             doc2pdf_merge.doc2pdf_merge(
-                args.list_file, args.output, merge=not args.no_merge)
+                args.list_file, args.output, merge=not args.no_merge,
+                engine=args.engine)
         except RuntimeError as e:
             print(f"[错误] {e}", file=sys.stderr)
             sys.exit(1)
