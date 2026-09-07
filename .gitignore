@@ -10,3 +10,5 @@ dist_mac/
 *.exe
 *.dmg
 a4.sh
+.ghcache/
+.portable_check/
