@@ -137,53 +137,40 @@ def _unique_path(path):
         n += 1
 
 
-def doc2pdf_batch(list_file, out_dir):
-    """按清单把每份文档单独转成独立 PDF（不合并）。
-
-    返回生成的文件路径列表；清单中的 .pdf 原样复制，其余按 Word 转换。
-    """
-    items = _load_items(list_file)
-    os.makedirs(out_dir, exist_ok=True)
-    results = []
+def _process_items(items, output, merge):
+    """核心处理：给定已解析好的文件列表，合并或逐份输出。"""
     total = len(items)
-    for i, src in enumerate(items, 1):
-        target = os.path.join(
-            out_dir, os.path.splitext(os.path.basename(src))[0] + ".pdf")
-        target = _unique_path(target)
-        if src.lower().endswith(".pdf"):
-            print(f"[{i}/{total}] 复制 {os.path.basename(src)} ... ", end="", flush=True)
-            shutil.copy2(src, target)
-        else:
-            print(f"[{i}/{total}] 转换 {os.path.basename(src)} ... ", end="", flush=True)
-            convert_to_pdf(src, target)
-        print("完成")
-        results.append(target)
-    print(f"处理结束：共 {len(results)} 个 PDF，输出目录: {out_dir}")
-    return results
-
-
-def doc2pdf_merge(list_file, output, merge=True):
-    """按清单把 doc/docx 转成 pdf。
-
-    merge=True : 全部拼接为一个 PDF（output 为文件路径）
-    merge=False: 每份单独输出一个 PDF（output 为输出目录）
-    """
-    items = _load_items(list_file)
     if not merge:
-        doc2pdf_batch(list_file, output)
-        return
+        os.makedirs(output, exist_ok=True)
+        results = []
+        for i, src in enumerate(items, 1):
+            target = os.path.join(
+                output, os.path.splitext(os.path.basename(src))[0] + ".pdf")
+            target = _unique_path(target)
+            if src.lower().endswith(".pdf"):
+                print(f"[{i}/{total}] 复制 {os.path.basename(src)} ... ",
+                      end="", flush=True)
+                shutil.copy2(src, target)
+            else:
+                print(f"[{i}/{total}] 转换 {os.path.basename(src)} ... ",
+                      end="", flush=True)
+                convert_to_pdf(src, target)
+            print("完成")
+            results.append(target)
+        print(f"处理结束：共 {len(results)} 个 PDF，输出目录: {output}")
+        return results
 
     tmpdir = tempfile.mkdtemp(prefix="doc2pdf_")
     try:
         pdfs = []
-        total = len(items)
         for i, src in enumerate(items, 1):
             if src.lower().endswith(".pdf"):
                 pdfs.append(src)
                 print(f"[{i}/{total}] 直接使用 {os.path.basename(src)}")
                 continue
             out_pdf = os.path.join(tmpdir, f"{i:03d}.pdf")
-            print(f"[{i}/{total}] 转换 {os.path.basename(src)} ... ", end="", flush=True)
+            print(f"[{i}/{total}] 转换 {os.path.basename(src)} ... ",
+                  end="", flush=True)
             convert_to_pdf(src, out_pdf)
             pdfs.append(out_pdf)
             print("完成")
@@ -193,6 +180,25 @@ def doc2pdf_merge(list_file, output, merge=True):
         print(f"完成: {output}")
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def doc2pdf_files(files, output, merge=True):
+    """GUI：直接传入文件列表（绝对路径）转 PDF。
+
+    merge=True : 全部拼接为一个 PDF（output 为文件路径）
+    merge=False: 每份单独输出一个 PDF（output 为输出目录）
+    """
+    _process_items([os.path.abspath(f) for f in files], output, merge)
+
+
+def doc2pdf_merge(list_file, output, merge=True):
+    """按清单文件把 doc/docx 转成 pdf（命令行入口用）。
+
+    merge=True : 全部拼接为一个 PDF（output 为文件路径）
+    merge=False: 每份单独输出一个 PDF（output 为输出目录）
+    """
+    items = _load_items(list_file)
+    _process_items(items, output, merge)
 
 
 def main():

@@ -222,46 +222,138 @@ class PdfToolApp(tk.Tk):
     def _build_doc_tab(self, nb):
         tab = ttk.Frame(nb, padding=12)
 
-        self.doc_list = tk.StringVar()
-        self._file_row(tab, "清单文件", self.doc_list, LIST_TYPES, "选择…",
-                       lambda: self._pick_open(
-                           self.doc_list, "选择清单文件(order.txt)", LIST_TYPES))
-        ttk.Label(tab, text="清单每行一个文件名；# 开头为注释；.pdf 直接使用；"
-                            "其余按 doc/docx 转成 PDF。",
-                  foreground="#666").pack(anchor="w", pady=(0, 6))
+        ttk.Label(tab, text="要转换的文档（顺序从上到下，合并时按此顺序拼接）：",
+                  anchor="w").pack(fill="x")
+        body = ttk.Frame(tab)
+        body.pack(fill="both", expand=True, pady=4)
+        self.doc_listbox = tk.Listbox(body, font=("Microsoft YaHei UI", 10),
+                                      selectmode="extended")
+        sb = ttk.Scrollbar(body, orient="vertical",
+                           command=self.doc_listbox.yview)
+        self.doc_listbox.configure(yscrollcommand=sb.set)
+        self.doc_listbox.pack(side="left", fill="both", expand=True)
+        sb.pack(side="left", fill="y")
+
+        btns = ttk.Frame(body)
+        btns.pack(side="left", padx=8, fill="y")
+        ttk.Button(btns, text="添加文件…", width=11,
+                   command=self._doc_add).pack(pady=2, fill="x")
+        ttk.Button(btns, text="移除选中", width=11,
+                   command=self._doc_remove).pack(pady=2, fill="x")
+        ttk.Button(btns, text="上移 ▲", width=11,
+                   command=lambda: self._doc_move(-1)).pack(pady=2, fill="x")
+        ttk.Button(btns, text="下移 ▼", width=11,
+                   command=lambda: self._doc_move(1)).pack(pady=2, fill="x")
+        ttk.Button(btns, text="从清单导入…", width=11,
+                   command=self._doc_import).pack(pady=2, fill="x")
+        ttk.Label(btns, text="支持 pdf / doc / docx",
+                  foreground="#888").pack(anchor="w", pady=(6, 0))
 
         self.doc_merge = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             tab, text="是否合并成一个文件",
             variable=self.doc_merge,
             command=self._on_doc_merge_toggle,
-        ).pack(anchor="w", pady=(0, 4))
+        ).pack(anchor="w", pady=(4, 2))
         ttk.Label(
             tab,
-            text="勾选：按清单顺序把所有 PDF 拼接为 1 个文件（填上方输出文件）；"
-                 "不勾选：每份文档单独转成一个 PDF 放到下方输出目录。",
-            foreground="#666").pack(anchor="w", pady=(0, 6))
+            text="勾选：按上方顺序把所有文档拼接为 1 个 PDF（填输出文件）；"
+                 "不勾选：每份单独转成一个 PDF 放到输出目录。",
+            foreground="#666").pack(anchor="w", pady=(0, 4))
 
         self.doc_out = tk.StringVar()
         self.doc_out_row = self._file_row(
             tab, "输出文件", self.doc_out, PDF_TYPES, "另存为…",
             lambda: self._pick_save(
                 self.doc_out, "保存拼接后的 PDF", "merged.pdf", PDF_TYPES))
-        ttk.Label(tab, text="不填时自动保存为清单所在目录下的 merged.pdf。",
+        ttk.Label(tab, text="不填时自动保存到第一个文档所在目录下的 merged.pdf。",
                   foreground="#666").pack(anchor="w", pady=(0, 2))
 
         self.doc_outdir = tk.StringVar()
         self.doc_outdir_row = self._file_row(
             tab, "输出目录", self.doc_outdir, None, "选择…",
             lambda: self._pick_dir(
-                self.doc_outdir, "选择输出目录（不填则用 清单目录/转换结果）"))
-        ttk.Label(tab, text="不填时自动创建清单所在目录下的“转换结果”文件夹。"
+                self.doc_outdir, "选择输出目录（不填则自动创建“转换结果”文件夹）"))
+        ttk.Label(tab, text="不填时自动创建第一个文档所在目录下的“转换结果”文件夹。"
                             "转换依赖本机安装的 Microsoft Word。",
                   foreground="#666").pack(anchor="w", pady=(0, 2))
 
         self._make_run_button(tab, "开始转换", self._run_doc)
         self._on_doc_merge_toggle()   # 按默认“合并”状态设置启用/禁用
         return tab
+
+    def _doc_add(self):
+        files = filedialog.askopenfilenames(
+            title="选择要转 PDF 的文件（可多选）",
+            filetypes=[("Word/PDF 文档", "*.pdf *.doc *.docx"),
+                       ("PDF 文件", "*.pdf"),
+                       ("Word 文档", "*.doc *.docx"),
+                       ("所有文件", "*.*")])
+        if not files:
+            return
+        unsupported = []
+        cur = set(self.doc_listbox.get(0, "end"))
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext not in (".pdf", ".doc", ".docx"):
+                unsupported.append(os.path.basename(f))
+                continue
+            if f not in cur:
+                self.doc_listbox.insert("end", f)
+                cur.add(f)
+        if unsupported:
+            messagebox.showwarning(
+                APP_NAME,
+                "以下文件不是 pdf/doc/docx，已跳过：\n" + "\n".join(unsupported[:8]))
+
+    def _doc_remove(self):
+        for idx in reversed(self.doc_listbox.curselection()):
+            self.doc_listbox.delete(idx)
+
+    def _doc_move(self, delta):
+        sel = self.doc_listbox.curselection()
+        if not sel:
+            return
+        i = sel[0]
+        j = i + delta
+        if not (0 <= j < self.doc_listbox.size()):
+            return
+        a, b = self.doc_listbox.get(i), self.doc_listbox.get(j)
+        self.doc_listbox.delete(i)
+        self.doc_listbox.insert(i, b)
+        self.doc_listbox.delete(j)
+        self.doc_listbox.insert(j, a)
+        self.doc_listbox.selection_set(j)
+
+    def _doc_import(self):
+        """从 order.txt 清单导入文件列表（可选功能，替代手工建清单）。"""
+        mf = filedialog.askopenfilename(
+            title="选择清单文件(order.txt)", filetypes=LIST_TYPES)
+        if not mf:
+            return
+        base_dir = os.path.dirname(os.path.abspath(mf))
+        cur = set(self.doc_listbox.get(0, "end"))
+        missing = []
+        try:
+            with open(mf, encoding="utf-8") as fh:
+                lines = [ln.strip() for ln in fh]
+        except OSError as exc:
+            messagebox.showerror(APP_NAME, f"读取清单失败：{exc}")
+            return
+        for ln in lines:
+            if not ln or ln.startswith("#"):
+                continue
+            p = ln if os.path.isabs(ln) else os.path.join(base_dir, ln)
+            if not os.path.exists(p):
+                missing.append(ln)
+                continue
+            if p not in cur:
+                self.doc_listbox.insert("end", p)
+                cur.add(p)
+        if missing:
+            messagebox.showwarning(
+                APP_NAME,
+                "清单中以下文件不存在，已跳过：\n" + "\n".join(missing[:8]))
 
     def _on_doc_merge_toggle(self):
         merged = self.doc_merge.get()
@@ -518,27 +610,28 @@ class PdfToolApp(tk.Tk):
         self._start(job)
 
     def _run_doc(self):
-        lst = self._require_file(self.doc_list.get(), "清单文件")
-        if lst is None:
+        files = list(self.doc_listbox.get(0, "end"))
+        if not files:
+            messagebox.showwarning(
+                APP_NAME, "请先添加要转换的文件（pdf/doc/docx），可多选。")
             return
+        first_dir = os.path.dirname(os.path.abspath(files[0]))
         merged = self.doc_merge.get()
         if merged:
             out = self.doc_out.get().strip()
             if not out:
-                out = os.path.join(os.path.dirname(os.path.abspath(lst)),
-                                   "merged.pdf")
+                out = os.path.join(first_dir, "merged.pdf")
 
             def job():
-                doc2pdf_merge.doc2pdf_merge(lst, out, merge=True)
+                doc2pdf_merge.doc2pdf_files(files, out, merge=True)
                 print(f"已保存: {out}")
         else:
             out_dir = self.doc_outdir.get().strip()
             if not out_dir:
-                out_dir = os.path.join(
-                    os.path.dirname(os.path.abspath(lst)), "转换结果")
+                out_dir = os.path.join(first_dir, "转换结果")
 
             def job():
-                doc2pdf_merge.doc2pdf_merge(lst, out_dir, merge=False)
+                doc2pdf_merge.doc2pdf_files(files, out_dir, merge=False)
         self._start(job)
 
     def _run_a4(self):
