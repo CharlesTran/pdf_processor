@@ -89,10 +89,15 @@ jobs:
           }
           if (-not $ok) {
             Write-Host "tar 不可用，改用 Compress-Archive"
-            Compress-Archive -Path package\* -DestinationPath $zip
+            if (Test-Path $zip) { Remove-Item $zip }
+            Compress-Archive -Path package\* -DestinationPath $zip -Force
           }
+          $global:LASTEXITCODE = 0
           if (-not (Test-Path $zip)) { throw "打包失败：未生成 zip" }
-          Write-Host "zip size: $((Get-Item $zip).Length / 1MB) MB"
+          $size = (Get-Item $zip).Length
+          Write-Host "zip size: $([math]::Round($size / 1MB, 1)) MB"
+          if ($size -lt 10MB) { throw "zip 过小，打包异常" }
+          exit 0
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
