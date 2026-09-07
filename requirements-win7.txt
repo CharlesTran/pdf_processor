@@ -1,0 +1,5 @@
+# Windows 7 兼容构建的依赖锁定（Python 3.8.10 + PyInstaller 5.x）
+# 说明：Python 3.9+ 打包的 exe 需要 Windows 8.1+，
+# 因此面向 Win7 必须使用 Python 3.8（最后一个官方支持 Win7 的版本）。
+pypdf==4.3.1
+pywin32==306; platform_system == "Windows"

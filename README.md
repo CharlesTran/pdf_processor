@@ -39,6 +39,12 @@
 > 运行该功能需要目标电脑安装 **Microsoft Word**。
 > 其余四个功能（拆分/合并/删除页/转A4）不依赖任何外部软件。
 
+> **Windows 7 兼容版**：默认 exe 用 Python 3.11 构建，最低要求 Windows 8.1。
+> 需要在 **Win7** 运行时，请下载 **Build Windows exe (Win7)** 工作流的产物
+> `PDF处理工具-windows-win7`（用最后一个支持 Win7 的 Python 3.8 构建）。
+> 若 Win7 仍提示缺少 `vcruntime140.dll` / `api-ms-win-crt-*.dll`，
+> 请安装“Microsoft Visual C++ 2015-2022 运行库(x64)”及系统更新 **KB2999226**。
+
 ### Windows 本地手动打包
 
 在装有 Python 3.9+ 的 Windows 电脑上，进入项目目录双击
@@ -84,7 +90,9 @@ pdf_processor/
 ├── doc2pdf_merge.py         # doc/docx 转 PDF 并拼接（Windows: Word COM）
 ├── pdf_to_a4.py             # PDF 批量标准化为 A4
 ├── requirements.txt         # 运行依赖（pypdf；Windows 额外 pywin32）
-├── pdf_tool.spec            # Windows PyInstaller 打包配置
+├── pdf_tool.spec            # Windows PyInstaller 打包配置（8.1+）
+├── pdf_tool_win7.spec       # Windows 7 兼容打包配置（Python 3.8）
+├── requirements-win7.txt    # Win7 构建的依赖锁定
 ├── pdf_tool_mac.spec        # macOS PyInstaller 打包配置（.app）
 ├── build_windows.bat        # Windows 手动打包脚本
 ├── build_dmg.sh             # macOS 手动打包脚本（产出 .dmg）
