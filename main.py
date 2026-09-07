@@ -34,9 +34,12 @@ def build_parser():
     p_del.add_argument("-r", "--range", help="要删除的页码范围，如 2-4")
     p_del.add_argument("-o", "--output")
 
-    p_doc = sub.add_parser("doc2pdf", help="doc/docx转pdf并按清单合并")
+    p_doc = sub.add_parser("doc2pdf", help="doc/docx转pdf并按清单合并(可--no-merge逐份输出)")
     p_doc.add_argument("list_file")
-    p_doc.add_argument("output", nargs="?", default="merged.pdf")
+    p_doc.add_argument("output", nargs="?", default="merged.pdf",
+                       help="合并时输出pdf路径；--no-merge时为输出目录")
+    p_doc.add_argument("--no-merge", action="store_true",
+                       help="不合并，每份文档单独转成 PDF 输出到目录")
 
     p_a4 = sub.add_parser("a4", help="批量将PDF页面等比缩放、居中到标准A4")
     p_a4.add_argument("input_dir", nargs="?", help="PDF目录（不传则使用当前目录）")
@@ -85,7 +88,8 @@ def main():
 
     elif args.command == "doc2pdf":
         try:
-            doc2pdf_merge.doc2pdf_merge(args.list_file, args.output)
+            doc2pdf_merge.doc2pdf_merge(
+                args.list_file, args.output, merge=not args.no_merge)
         except RuntimeError as e:
             print(f"[错误] {e}", file=sys.stderr)
             sys.exit(1)

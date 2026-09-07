@@ -226,21 +226,53 @@ class PdfToolApp(tk.Tk):
         self._file_row(tab, "清单文件", self.doc_list, LIST_TYPES, "选择…",
                        lambda: self._pick_open(
                            self.doc_list, "选择清单文件(order.txt)", LIST_TYPES))
-        ttk.Label(tab, text="清单每行一个文件名；# 开头为注释；.pdf 直接拼接；"
-                            "其余按 doc/docx 转成 PDF 后按行序拼接。",
+        ttk.Label(tab, text="清单每行一个文件名；# 开头为注释；.pdf 直接使用；"
+                            "其余按 doc/docx 转成 PDF。",
                   foreground="#666").pack(anchor="w", pady=(0, 6))
+
+        self.doc_merge = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            tab, text="是否合并成一个文件",
+            variable=self.doc_merge,
+            command=self._on_doc_merge_toggle,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            tab,
+            text="勾选：按清单顺序把所有 PDF 拼接为 1 个文件（填上方输出文件）；"
+                 "不勾选：每份文档单独转成一个 PDF 放到下方输出目录。",
+            foreground="#666").pack(anchor="w", pady=(0, 6))
 
         self.doc_out = tk.StringVar()
-        self._file_row(tab, "输出文件", self.doc_out, PDF_TYPES, "另存为…",
-                       lambda: self._pick_save(
-                           self.doc_out, "保存拼接后的 PDF", "merged.pdf",
-                           PDF_TYPES))
-        ttk.Label(tab, text="不填时自动保存为清单所在目录下的 merged.pdf。"
-                            "Windows 转换依赖本机安装的 Microsoft Word。",
-                  foreground="#666").pack(anchor="w", pady=(0, 6))
+        self.doc_out_row = self._file_row(
+            tab, "输出文件", self.doc_out, PDF_TYPES, "另存为…",
+            lambda: self._pick_save(
+                self.doc_out, "保存拼接后的 PDF", "merged.pdf", PDF_TYPES))
+        ttk.Label(tab, text="不填时自动保存为清单所在目录下的 merged.pdf。",
+                  foreground="#666").pack(anchor="w", pady=(0, 2))
 
-        self._make_run_button(tab, "开始转换并拼接", self._run_doc)
+        self.doc_outdir = tk.StringVar()
+        self.doc_outdir_row = self._file_row(
+            tab, "输出目录", self.doc_outdir, None, "选择…",
+            lambda: self._pick_dir(
+                self.doc_outdir, "选择输出目录（不填则用 清单目录/转换结果）"))
+        ttk.Label(tab, text="不填时自动创建清单所在目录下的“转换结果”文件夹。"
+                            "转换依赖本机安装的 Microsoft Word。",
+                  foreground="#666").pack(anchor="w", pady=(0, 2))
+
+        self._make_run_button(tab, "开始转换", self._run_doc)
+        self._on_doc_merge_toggle()   # 按默认“合并”状态设置启用/禁用
         return tab
+
+    def _on_doc_merge_toggle(self):
+        merged = self.doc_merge.get()
+        self._set_row_enabled(self.doc_out_row, merged)
+        self._set_row_enabled(self.doc_outdir_row, not merged)
+
+    def _set_row_enabled(self, row, enabled):
+        state = "normal" if enabled else "disabled"
+        for w in row.winfo_children():
+            if isinstance(w, (ttk.Entry, ttk.Button)):
+                w.configure(state=state)
 
     # ---------- 转 A4
     def _build_a4_tab(self, nb):
@@ -489,14 +521,24 @@ class PdfToolApp(tk.Tk):
         lst = self._require_file(self.doc_list.get(), "清单文件")
         if lst is None:
             return
-        out = self.doc_out.get().strip()
-        if not out:
-            out = os.path.join(os.path.dirname(os.path.abspath(lst)),
-                               "merged.pdf")
+        merged = self.doc_merge.get()
+        if merged:
+            out = self.doc_out.get().strip()
+            if not out:
+                out = os.path.join(os.path.dirname(os.path.abspath(lst)),
+                                   "merged.pdf")
 
-        def job():
-            doc2pdf_merge.doc2pdf_merge(lst, out)
-            print(f"已保存: {out}")
+            def job():
+                doc2pdf_merge.doc2pdf_merge(lst, out, merge=True)
+                print(f"已保存: {out}")
+        else:
+            out_dir = self.doc_outdir.get().strip()
+            if not out_dir:
+                out_dir = os.path.join(
+                    os.path.dirname(os.path.abspath(lst)), "转换结果")
+
+            def job():
+                doc2pdf_merge.doc2pdf_merge(lst, out_dir, merge=False)
         self._start(job)
 
     def _run_a4(self):

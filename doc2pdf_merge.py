@@ -106,8 +106,8 @@ def merge_pdfs(pdf_files, out_pdf):
         raise RuntimeError("合并失败：未生成输出文件")
 
 
-def doc2pdf_merge(list_file, output):
-    """按清单把 doc/docx 转成 pdf 并按顺序拼接为一个 pdf。"""
+def _load_items(list_file):
+    """读取清单文件，返回按顺序展开的文件路径列表（含错误检查）。"""
     base_dir = os.path.dirname(os.path.abspath(list_file))
     items = []
     with open(list_file, encoding="utf-8") as f:
@@ -119,9 +119,59 @@ def doc2pdf_merge(list_file, output):
             if not os.path.exists(p):
                 raise RuntimeError(f"第 {lineno} 行文件不存在: {p}")
             items.append(p)
-
     if not items:
         raise RuntimeError("清单为空，无事可做。")
+    return items
+
+
+def _unique_path(path):
+    """目标路径已存在时自动追加 _2/_3…，避免覆盖。"""
+    if not os.path.exists(path):
+        return path
+    stem, ext = os.path.splitext(path)
+    n = 2
+    while True:
+        cand = f"{stem}_{n}{ext}"
+        if not os.path.exists(cand):
+            return cand
+        n += 1
+
+
+def doc2pdf_batch(list_file, out_dir):
+    """按清单把每份文档单独转成独立 PDF（不合并）。
+
+    返回生成的文件路径列表；清单中的 .pdf 原样复制，其余按 Word 转换。
+    """
+    items = _load_items(list_file)
+    os.makedirs(out_dir, exist_ok=True)
+    results = []
+    total = len(items)
+    for i, src in enumerate(items, 1):
+        target = os.path.join(
+            out_dir, os.path.splitext(os.path.basename(src))[0] + ".pdf")
+        target = _unique_path(target)
+        if src.lower().endswith(".pdf"):
+            print(f"[{i}/{total}] 复制 {os.path.basename(src)} ... ", end="", flush=True)
+            shutil.copy2(src, target)
+        else:
+            print(f"[{i}/{total}] 转换 {os.path.basename(src)} ... ", end="", flush=True)
+            convert_to_pdf(src, target)
+        print("完成")
+        results.append(target)
+    print(f"处理结束：共 {len(results)} 个 PDF，输出目录: {out_dir}")
+    return results
+
+
+def doc2pdf_merge(list_file, output, merge=True):
+    """按清单把 doc/docx 转成 pdf。
+
+    merge=True : 全部拼接为一个 PDF（output 为文件路径）
+    merge=False: 每份单独输出一个 PDF（output 为输出目录）
+    """
+    items = _load_items(list_file)
+    if not merge:
+        doc2pdf_batch(list_file, output)
+        return
 
     tmpdir = tempfile.mkdtemp(prefix="doc2pdf_")
     try:
@@ -147,15 +197,20 @@ def doc2pdf_merge(list_file, output):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="doc/docx 批量转 pdf 并按清单顺序拼接",
-        epilog="示例: doc2pdf_merge.py order.txt 结果.pdf",
+        description="doc/docx 批量转 pdf：默认按清单顺序拼接为一个 PDF；"
+                    "加 --no-merge 则每份单独输出",
+        epilog="示例:\n"
+               "  doc2pdf_merge.py order.txt 结果.pdf          # 合并为一个\n"
+               "  doc2pdf_merge.py order.txt 输出目录/ --no-merge # 逐份输出到目录",
     )
     parser.add_argument("list_file", help="顺序清单文件，每行一个文件名")
     parser.add_argument("output", nargs="?", default="merged.pdf",
-                        help="输出 pdf 路径（默认 merged.pdf）")
+                        help="合并时: 输出 pdf 路径；--no-merge 时: 输出目录")
+    parser.add_argument("--no-merge", action="store_true",
+                        help="不合并：每份文档单独转成 PDF 放入输出目录")
     args = parser.parse_args()
     try:
-        doc2pdf_merge(args.list_file, args.output)
+        doc2pdf_merge(args.list_file, args.output, merge=not args.no_merge)
     except RuntimeError as e:
         print(f"[错误] {e}", file=sys.stderr)
         sys.exit(1)
