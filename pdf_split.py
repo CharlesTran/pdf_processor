@@ -70,6 +70,77 @@ def split_pdf(pdf_path, output_dir=None, pages=None, mode="single"):
     print("拆分完成!")
 
 
+def parse_page_spec(text):
+    """把 '2,4-6,8' 这类文本解析为有序页号列表。
+
+    支持逗号分隔的单个页码与 a-b 范围混写；空文本返回 []（表示全部页）。
+    格式非法时抛 ValueError。
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    pages = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            try:
+                start, end = int(a), int(b)
+            except ValueError:
+                raise ValueError(f"页码范围格式不对：{part}（应为 a-b，如 1-5）")
+            if start < 1 or end < start:
+                raise ValueError(f"页码范围格式不对：{part}（应为正数且 a<=b）")
+            pages.extend(range(start, end + 1))
+        else:
+            try:
+                n = int(part)
+            except ValueError:
+                raise ValueError(f"页码格式不对：{part}（应为数字）")
+            if n < 1:
+                raise ValueError(f"页码格式不对：{part}（页码从 1 开始）")
+            pages.append(n)
+    return pages
+
+
+def unique_pages(pages):
+    """去重并保持原有顺序。"""
+    seen = set()
+    out = []
+    for p in pages:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def extract_pages(pdf_path, page_numbers, output_path):
+    """把指定页(1 起)写成一个 PDF 文件；page_numbers 为空列表表示整本。
+
+    超出实际总页数的页码自动忽略。返回实际写入的页号列表。
+    """
+    reader = PdfReader(pdf_path)
+    total = len(reader.pages)
+    if page_numbers:
+        nums = [n for n in unique_pages(page_numbers) if 1 <= n <= total]
+    else:
+        nums = list(range(1, total + 1))
+    if not nums:
+        raise ValueError("没有有效的页码可提取（超出总页数？）")
+
+    writer = PdfWriter()
+    for n in nums:
+        writer.add_page(reader.pages[n - 1])
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    with open(output_path, "wb") as f:
+        writer.write(f)
+    print(f"已保存: {output_path} ({len(nums)} 页)")
+    return nums
+
+
 def main():
     if len(sys.argv) > 1:
         if sys.argv[1] == "-h" or sys.argv[1] == "--help":

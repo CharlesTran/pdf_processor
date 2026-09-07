@@ -72,9 +72,10 @@ class PdfToolApp(tk.Tk):
         self.worker: threading.Thread | None = None
         self._busy = False
         self._run_buttons: list[tk.Widget] = []
+        self._poll_job = None
 
         self._build_ui()
-        self.after(120, self._poll_log)
+        self._poll_job = self.after(120, self._poll_log)
         self.log_line(f"{APP_NAME} v{APP_VERSION} 已启动。\n"
                       "请选择功能页签，填好参数后点击“开始”。\n"
                       "“doc转PDF”在 Windows 上需要本机安装 Microsoft Word。\n")
@@ -132,25 +133,25 @@ class PdfToolApp(tk.Tk):
                        lambda: self._pick_open(
                            self.split_pdf, "选择要拆分的 PDF", PDF_TYPES))
 
-        mode = ttk.Frame(tab)
-        mode.pack(fill="x", pady=6)
-        self.split_mode = tk.StringVar(value="single")
-        ttk.Radiobutton(mode, text="按每页拆分", value="single",
-                        variable=self.split_mode).pack(side="left", padx=(0, 14))
-        ttk.Radiobutton(mode, text="页码范围(如 1-5)", value="range",
-                        variable=self.split_mode).pack(side="left", padx=(0, 14))
-        ttk.Radiobutton(mode, text="指定页(如 1,3,5)", value="custom",
-                        variable=self.split_mode).pack(side="left")
-
-        self.split_range = tk.StringVar()
-        self.split_custom = tk.StringVar()
         row = ttk.Frame(tab)
         row.pack(fill="x", pady=3)
-        ttk.Label(row, text="范围/页", width=12).pack(side="left")
-        self.split_range_ent = ttk.Entry(row, textvariable=self.split_range, width=22)
-        self.split_range_ent.pack(side="left", padx=(0, 14))
-        self.split_custom_ent = ttk.Entry(row, textvariable=self.split_custom, width=22)
-        self.split_custom_ent.pack(side="left")
+        ttk.Label(row, text="页码范围", width=12).pack(side="left")
+        self.split_spec = tk.StringVar()
+        ent = ttk.Entry(row, textvariable=self.split_spec, width=40)
+        ent.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ttk.Label(tab, text="留空表示整本拆分；支持混写，例如：1-5、1,3,5、2,4-6,8",
+                  foreground="#666").pack(anchor="w", pady=(0, 4))
+
+        self.split_merge = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            tab, text="是否合并成一个文件",
+            variable=self.split_merge,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            tab,
+            text="勾选：把所选页存为 1 个 PDF；不勾选：把所选页逐个拆成多个单页 PDF。"
+                 "（留空且不勾选 = 整本每页拆成一个文件）",
+            foreground="#666").pack(anchor="w", pady=(0, 6))
 
         self.split_out = tk.StringVar()
         self._file_row(tab, "输出目录", self.split_out, None, "选择…",
@@ -355,7 +356,16 @@ class PdfToolApp(tk.Tk):
                     self.log_text.see("end")
         except queue.Empty:
             pass
-        self.after(120, self._poll_log)
+        self._poll_job = self.after(120, self._poll_log)
+
+    def destroy(self):
+        if self._poll_job is not None:
+            try:
+                self.after_cancel(self._poll_job)
+            except Exception:
+                pass
+            self._poll_job = None
+        super().destroy()
 
     def log_line(self, msg):
         self.log_text.insert("end", msg)
@@ -376,32 +386,64 @@ class PdfToolApp(tk.Tk):
         pdf = self._require_file(self.split_pdf.get(), "PDF文件")
         if pdf is None:
             return
-        mode = self.split_mode.get()
-        pages = None
-        if mode == "range":
-            text = self.split_range.get().strip()
-            try:
-                start, end = map(int, text.split("-", 1))
-                pages = (start, end)
-            except ValueError:
-                messagebox.showwarning(APP_NAME, "页码范围格式应为 1-5")
-                return
-        elif mode == "custom":
-            text = self.split_custom.get().strip()
-            try:
-                pages = [int(p) for p in text.split(",") if p.strip()]
-            except ValueError:
-                messagebox.showwarning(APP_NAME, "指定页格式应为 1,3,5")
-                return
-            if not pages:
-                messagebox.showwarning(APP_NAME, "请填写要提取的页码。")
-                return
+
+        merge = self.split_merge.get()
+        try:
+            pages = pdf_split.parse_page_spec(self.split_spec.get())
+        except ValueError as exc:
+            messagebox.showwarning(APP_NAME, str(exc))
+            return
+        if merge and not pages:
+            messagebox.showwarning(
+                APP_NAME,
+                "勾选“是否合并成一个文件”时需要先填写页码范围。\n"
+                "（留空 = 整本拆分，此时应取消勾选，每页存一个文件）",
+            )
+            return
 
         out_dir = self.split_out.get().strip() or os.path.dirname(pdf) or os.getcwd()
+        base = os.path.splitext(os.path.basename(pdf))[0]
+        total = pdf_split.get_pdf_info(pdf)
+        # 过滤掉超出总页数的页码
+        valid = [p for p in pdf_split.unique_pages(pages) if 1 <= p <= total]
+        skipped = [p for p in pdf_split.unique_pages(pages) if not 1 <= p <= total]
+
+        if not merge and not pages:
+            targets = list(range(1, total + 1))
+        else:
+            targets = valid
+
+        if not targets:
+            messagebox.showwarning(APP_NAME, "没有有效的页码可拆分（超出总页数？）")
+            return
 
         def job():
-            print(f"输出目录: {out_dir}\n")
-            pdf_split.split_pdf(pdf, out_dir, pages, mode)
+            os.makedirs(out_dir, exist_ok=True)
+            print(f"PDF: {pdf}")
+            print(f"总页数: {total}")
+            print(f"输出目录: {out_dir}")
+            for p in skipped:
+                print(f"[跳过] 第 {p} 页超出范围（总 {total} 页）")
+            print("-" * 40)
+
+            if merge:
+                if len(targets) == 1:
+                    name = f"{base}_第{targets[0]}页.pdf"
+                elif targets == list(range(targets[0], targets[-1] + 1)):
+                    name = f"{base}_第{targets[0]}-{targets[-1]}页.pdf"
+                else:
+                    name = f"{base}_自定义.pdf"
+                pdf_split.extract_pages(pdf, targets,
+                                        os.path.join(out_dir, name))
+                print("已合并为 1 个文件。")
+            else:
+                for p in targets:
+                    pdf_split.extract_pages(pdf, [p],
+                                            os.path.join(out_dir,
+                                                         f"{base}_第{p}页.pdf"))
+                print(f"共拆分出 {len(targets)} 个文件。")
+            print("-" * 40)
+            print("拆分完成!")
         self._start(job)
 
     def _run_merge(self):
