@@ -62,20 +62,21 @@ jobs:
           $soffice = Get-ChildItem -Path lo_src -Recurse -Filter soffice.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           $engineRoot = $soffice.Directory.Parent.FullName
           Copy-Item -Path $engineRoot -Destination "package\libreoffice" -Recurse -Force
-          @"
-PDF 处理工具 - 完整便携版（Win7 及以上）
-
-使用方法：
-  1. 把本文件夹整体解压/复制到任意位置（例如 D:\PDF工具）
-  2. 双击 PDF处理工具.exe 即可使用，无需安装任何软件
-
-说明：
-  - 已内置 LibreOffice 转换引擎（libreoffice 文件夹），
-    doc/docx 转 PDF 开箱即用，不依赖 Office / WPS。
-  - 拆分/合并/删除页/转A4 为纯内置功能，亦不依赖外部软件。
-  - 如系统提示“缺少运行库”，请安装微软常用运行库或确认已打
-    系统更新 KB2999226（常见于未更新的 Windows 7）。
-"@ | Out-File -FilePath "package\使用说明.txt" -Encoding UTF8
+          $lines = @(
+            'PDF 处理工具 - 完整便携版（Win7 及以上）',
+            '',
+            '使用方法：',
+            '  1. 把本文件夹整体解压/复制到任意位置（例如 D:\PDF工具）',
+            '  2. 双击 PDF处理工具.exe 即可使用，无需安装任何软件',
+            '',
+            '说明：',
+            '  - 已内置 LibreOffice 转换引擎（libreoffice 文件夹），',
+            '    doc/docx 转 PDF 开箱即用，不依赖 Office / WPS。',
+            '  - 拆分/合并/删除页/转A4 为纯内置功能，亦不依赖外部软件。',
+            '  - 如系统提示“缺少运行库”，请安装微软常用运行库或确认已打',
+            '    系统更新 KB2999226（常见于未更新的 Windows 7）。'
+          )
+          $lines | Out-File -FilePath "package\使用说明.txt" -Encoding UTF8
 
       - name: Zip package
         shell: pwsh
