@@ -51,6 +51,27 @@ pip install -r requirements.txt pyinstaller
 pyinstaller --noconfirm --clean pdf_tool.spec
 ```
 
+## macOS 桌面版（.dmg）
+
+绿色图标的 `PDF处理工具.app`，拖入“应用程序”即可使用，界面与 Windows 版一致。
+
+### 获取 dmg（GitHub Actions 自动构建）
+
+1. 打开仓库的 **Actions** 页面 → 选择 **Build macOS dmg** 工作流
+2. 在最近一次运行记录（绿色 ✓）底部 **Artifacts** 下载
+   `PDF处理工具-macos`
+3. 解压得到 `PDF处理工具.dmg`，双击挂载后把 `PDF处理工具` 拖进 Applications
+
+> 首次打开提示“无法验证开发者”时：右键点 App → 打开；
+> 或到 系统设置 → 隐私与安全性 里点击“仍要打开”。
+> （如需彻底去除提示，可用 Apple Developer ID 对产物签名/公证。）
+
+### macOS 本地手动打包
+
+```bash
+bash build_dmg.sh      # 需要 Python3 + 网络；产物在 dist_mac/PDF处理工具.dmg
+```
+
 ## 目录结构
 
 ```
@@ -63,10 +84,15 @@ pdf_processor/
 ├── doc2pdf_merge.py         # doc/docx 转 PDF 并拼接（Windows: Word COM）
 ├── pdf_to_a4.py             # PDF 批量标准化为 A4
 ├── requirements.txt         # 运行依赖（pypdf；Windows 额外 pywin32）
-├── pdf_tool.spec            # PyInstaller 打包配置
+├── pdf_tool.spec            # Windows PyInstaller 打包配置
+├── pdf_tool_mac.spec        # macOS PyInstaller 打包配置（.app）
 ├── build_windows.bat        # Windows 手动打包脚本
+├── build_dmg.sh             # macOS 手动打包脚本（产出 .dmg）
+├── make_icon.py             # 纯 Python 生成 app.ico / app.icns
+├── assets/                  # 应用图标
 └── .github/workflows/
-    └── build-windows.yml    # 自动构建 Windows exe
+    ├── build-windows.yml    # 自动构建 Windows exe
+    └── build-macos.yml      # 自动构建 macOS dmg
 ```
 
 ## 环境要求

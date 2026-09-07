@@ -3,5 +3,9 @@ __pycache__/
 .DS_Store
 .venv/
 build/
+build_mac/
 dist/
+dist_mac/
+.pyinstaller_cache/
 *.exe
+*.dmg

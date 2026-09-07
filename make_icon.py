@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""用纯 Python 标准库生成应用图标 assets/app.ico（免 Pillow）。
+"""用纯 Python 标准库生成应用图标（免 Pillow）。
 
-Windows 图标文件（.ico）内嵌 PNG 图像（Vista+ 支持）。
+- assets/app.ico   Windows 图标（内嵌 PNG，Vista+ 支持）
+- assets/app.icns  macOS 图标（通过 iconutil 打包，需 macOS 系统自带工具）
+
 图标主体：蓝色圆角方块 + 白色文档 + 深蓝块状 “PDF” 字样 + 红色底条。
-用法: python make_icon.py [输出路径]
+用法:
+    python make_icon.py            # 重新生成 assets 下两个图标
 """
 
 import os
 import struct
+import subprocess
 import sys
+import tempfile
 import zlib
 
-SIZE = 256
-R = 56             # 背景圆角半径
+BASE = 256
 BG = (45, 125, 233, 255)        # 主蓝
 PAGE = (255, 255, 255, 255)
 INK = (38, 62, 96, 255)         # 深蓝字
@@ -58,59 +62,62 @@ def blend(dst, src, a):
     )
 
 
-def draw_canvas():
-    """返回 SIZE*SIZE 的像素列表（每项 RGBA 浮点/整数）。"""
-    px = [[(0.0, 0.0, 0.0, 0.0)] * SIZE for _ in range(SIZE)]
+def draw_canvas(size=BASE):
+    """绘制 size×size 的图标位图，返回 RGBA 字节。"""
+    f = size / BASE
+    px = [[(0.0, 0.0, 0.0, 0.0)] * size for _ in range(size)]
+
+    def F(*vals):
+        return [round(v * f) for v in vals]
 
     # 背景蓝圆角方块
-    for yy in range(SIZE):
-        for xx in range(SIZE):
-            a = rounded_rect_alpha(xx, yy, 0, 0, SIZE - 1, SIZE - 1, R)
+    br = 56 * f
+    for yy in range(size):
+        for xx in range(size):
+            a = rounded_rect_alpha(xx, yy, 0, 0, size - 1, size - 1, br)
             if a > 0:
                 px[yy][xx] = blend(px[yy][xx], BG, a)
 
     # 白色文档页（圆角矩形）
-    page = (64.0, 48.0, 208.0, 208.0)
-    for yy in range(int(page[1]) - 2, int(page[3]) + 2):
-        for xx in range(int(page[0]) - 2, int(page[2]) + 2):
-            a = rounded_rect_alpha(xx, yy, page[0], page[1], page[2], page[3], 14)
+    px0, py0, px1, py1 = F(64, 48, 208, 208)
+    pr = 14 * f
+    for yy in range(max(0, py0 - 2), min(size, py1 + 2)):
+        for xx in range(max(0, px0 - 2), min(size, px1 + 2)):
+            a = rounded_rect_alpha(xx, yy, px0, py0, px1, py1, pr)
             if a > 0:
                 px[yy][xx] = blend(px[yy][xx], PAGE, a)
 
-    def fill_rect(x0, y0, x1, y1, color, only_on_page=True):
-        for yy in range(y0, y1):
-            for xx in range(x0, x1):
-                if not (0 <= xx < SIZE and 0 <= yy < SIZE):
-                    continue
-                if only_on_page and px[yy][xx][3] < 0.5:
+    def fill_rect(x0, y0, x1, y1, color):
+        x0, y0, x1, y1 = F(x0, y0, x1, y1)
+        for yy in range(max(0, y0), min(size, y1)):
+            for xx in range(max(0, x0), min(size, x1)):
+                if px[yy][xx][3] < 0.5:
                     continue  # 只画在不透明(白色页面)区域内
                 px[yy][xx] = blend(px[yy][xx], color, 1.0)
 
-    # 顶部灰色标题条
-    fill_rect(84, 86, 188, 92, BAR)
-    # 底部红色条
-    fill_rect(84, 192, 188, 198, RED)
+    fill_rect(84, 86, 188, 92, BAR)     # 顶部灰色标题条
+    fill_rect(84, 192, 188, 198, RED)   # 底部红色条
 
-    # “PDF” 点阵字
+    # “PDF” 点阵字：坐标按 256 基准计算，交给 fill_rect 统一缩放
     letters = ["P", "D", "F"]
-    cell, gap = 6, 2
-    total_cols = len(letters) * 5 + (len(letters) - 1) * gap
-    start_x = (SIZE - total_cols * cell) // 2
-    top = 106
+    cell0, gap0 = 6, 2
+    total_cols = len(letters) * 5 + (len(letters) - 1) * gap0
+    start_x0 = (BASE - total_cols * cell0) // 2
+    top0 = 106
     for li, ch in enumerate(letters):
-        base_x = start_x + li * (5 + gap) * cell
+        base_x0 = start_x0 + li * (5 + gap0) * cell0
         for row_i, row in enumerate(FONT[ch]):
             for col_i, bit in enumerate(row):
                 if bit == "1":
-                    fill_rect(base_x + col_i * cell, top + row_i * cell,
-                              base_x + (col_i + 1) * cell,
-                              top + (row_i + 1) * cell, INK)
+                    fill_rect(base_x0 + col_i * cell0, top0 + row_i * cell0,
+                              base_x0 + (col_i + 1) * cell0,
+                              top0 + (row_i + 1) * cell0, INK)
 
-    out = bytearray(SIZE * SIZE * 4)
-    for yy in range(SIZE):
-        for xx in range(SIZE):
+    out = bytearray(size * size * 4)
+    for yy in range(size):
+        for xx in range(size):
             r, g, b, a = px[yy][xx]
-            i = (yy * SIZE + xx) * 4
+            i = (yy * size + xx) * 4
             out[i] = int(r + 0.5)
             out[i + 1] = int(g + 0.5)
             out[i + 2] = int(b + 0.5)
@@ -118,16 +125,16 @@ def draw_canvas():
     return bytes(out)
 
 
-def downscale(rgba, size):
-    """从 256 画布降采样到 size（取最近点即可，图标允许）。"""
-    scale = SIZE // size
-    out = bytearray(size * size * 4)
-    for yy in range(size):
-        by = (yy * scale + scale // 2) * SIZE
-        for xx in range(size):
-            i = (yy * size + xx) * 4
-            bi = (by + xx * scale + scale // 2) * 4
-            out[i:i + 4] = rgba[bi:bi + 4]
+def resize_nearest(rgba, src, dst):
+    """最近邻缩放到 dst×dst。"""
+    out = bytearray(dst * dst * 4)
+    for yy in range(dst):
+        sy = yy * src // dst
+        for xx in range(dst):
+            sx = xx * src // dst
+            i = (yy * dst + xx) * 4
+            j = (sy * src + sx) * 4
+            out[i:i + 4] = rgba[j:j + 4]
     return bytes(out)
 
 
@@ -147,11 +154,10 @@ def encode_png(rgba: bytes, w: int, h: int) -> bytes:
             png_chunk(b"IEND", b""))
 
 
-def make_ico(out_path: str) -> None:
-    canvas = draw_canvas()
+def make_ico(out_path: str, canvas256: bytes) -> None:
     pngs = []
     for size in (16, 32, 48, 64, 128, 256):
-        data = canvas if size == 256 else downscale(canvas, size)
+        data = canvas256 if size == 256 else resize_nearest(canvas256, 256, size)
         pngs.append((size, encode_png(data, size, size)))
 
     header = struct.pack("<HHH", 0, 1, len(pngs))
@@ -166,10 +172,46 @@ def make_ico(out_path: str) -> None:
     print(f"已生成: {out_path} ({os.path.getsize(out_path)} bytes)")
 
 
+def make_icns(out_path: str, canvas1024: bytes) -> None:
+    """先生成 .iconset（10 张标准尺寸 PNG），再用 iconutil 转 .icns。"""
+    if sys.platform != "darwin":
+        print("提示: .icns 需在 macOS 上生成（依赖 iconutil），跳过。")
+        return
+    sets = [
+        ("icon_16x16.png", 16),
+        ("icon_16x16@2x.png", 32),
+        ("icon_32x32.png", 32),
+        ("icon_32x32@2x.png", 64),
+        ("icon_128x128.png", 128),
+        ("icon_128x128@2x.png", 256),
+        ("icon_256x256.png", 256),
+        ("icon_256x256@2x.png", 512),
+        ("icon_512x512.png", 512),
+        ("icon_512x512@2x.png", 1024),
+    ]
+    with tempfile.TemporaryDirectory(prefix="pdfproc_iconset_") as td:
+        iconset = os.path.join(td, "app.iconset")
+        os.makedirs(iconset)
+        for name, size in sets:
+            data = canvas1024 if size == 1024 else resize_nearest(canvas1024, 1024, size)
+            with open(os.path.join(iconset, name), "wb") as fh:
+                fh.write(encode_png(data, size, size))
+        proc = subprocess.run(
+            ["iconutil", "-c", "icns", iconset, "-o", out_path],
+            capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"iconutil 失败: {proc.stderr}")
+    print(f"已生成: {out_path} ({os.path.getsize(out_path)} bytes)")
+
+
 def main() -> None:
-    out = sys.argv[1] if len(sys.argv) > 1 else "assets/app.ico"
-    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    make_ico(out)
+    assets = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+    os.makedirs(assets, exist_ok=True)
+    canvas256 = draw_canvas(BASE)
+    make_ico(os.path.join(assets, "app.ico"), canvas256)
+    if sys.platform == "darwin":
+        canvas1024 = draw_canvas(1024)
+        make_icns(os.path.join(assets, "app.icns"), canvas1024)
 
 
 if __name__ == "__main__":
