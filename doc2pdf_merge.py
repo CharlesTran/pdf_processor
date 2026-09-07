@@ -68,9 +68,12 @@ def _find_soffice():
             return p
 
     # 常见 Windows 安装位置与“软件旁的便携目录”
+    # 便携布局为: <程序目录>/libreoffice/program/soffice.exe
     bases = [_app_dir()]
     bases += [os.path.join(_app_dir(), "libreoffice"),
-              os.path.join(_app_dir(), "LibreOffice")]
+              os.path.join(_app_dir(), "libreoffice", "program"),
+              os.path.join(_app_dir(), "LibreOffice"),
+              os.path.join(_app_dir(), "LibreOffice", "program")]
     bases += [r"C:\Program Files\LibreOffice\program",
               r"C:\Program Files (x86)\LibreOffice\program",
               "/Applications/LibreOffice.app/Contents/MacOS",

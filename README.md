@@ -35,6 +35,18 @@
 
 也可以在 Actions 页面手动触发（Run workflow → 分支选 main）。
 
+### 完整便携版（下载即用，内置转换引擎，推荐分发）
+
+默认 exe 很小，但 doc转PDF 若目标电脑没装 Word/LibreOffice 需要另装引擎。
+需要“**解压即用、不装任何额外文件**”时，使用 **Build Portable Full Package**
+工作流产物 `PDF处理工具-完整便携版-win7`：
+
+- 触发方式：在 Actions 页面手动 Run workflow，或推送 `v*` 标签（如 `v1.1.0`）
+- 内容：`PDF处理工具.exe` + 内置 `libreoffice/` 便携引擎 + 使用说明
+- 使用：整个 zip 解压到任意位置，双击 exe 即可；doc/docx 转换开箱即用，
+  不依赖 Office / WPS / 任何安装。Win7 及以上通用。
+- 体积较大（数百 MB，含 LibreOffice），仅在需要时构建，不随每次推送自动打。
+
 > 说明：doc转PDF **不强制依赖 Office/WPS**。自动按可用性选择引擎：
 > Word(2010+) → LibreOffice；都没有时会弹出安装指引。
 > 推荐装 LibreOffice（免费开源、支持 .doc/.docx，下载

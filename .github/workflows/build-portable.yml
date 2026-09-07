@@ -1,0 +1,101 @@
+name: Build Portable Full Package (Win7+)
+
+# 产出“下载即用”的完整便携包：PDF处理工具.exe + 内置 LibreOffice
+# （无需安装 Office/WPS/LibreOffice，支持 .doc/.docx 转换）。
+# 触发方式：
+#   1) 推送 v* 标签（如 v1.1.0）
+#   2) 或到 Actions 页面手动 Run workflow
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-portable:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.8 (Win7-compatible exe)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-win7.txt pyinstaller==5.13.2
+
+      - name: Build exe with PyInstaller
+        shell: bash
+        run: python -m PyInstaller --noconfirm --clean pdf_tool_win7.spec
+
+      - name: Download LibreOffice MSI (portable engine)
+        shell: pwsh
+        run: |
+          $msi = "LibreOffice_26.2.6_Win_x86-64.msi"
+          $url = "https://download.documentfoundation.org/libreoffice/stable/26.2.6/win/x86_64/$msi"
+          Invoke-WebRequest -Uri $url -OutFile $msi
+          Write-Host "MSI size: $((Get-Item $msi).Length / 1MB) MB"
+
+      - name: Extract LibreOffice (administrative install, no registry install)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path lo_src | Out-Null
+          Start-Process msiexec.exe -ArgumentList @("/a", "$((Get-Location).Path)\LibreOffice_26.2.6_Win_x86-64.msi", "/qn", "TARGETDIR=$((Get-Location).Path)\lo_src") -Wait
+          # 定位 program\soffice.exe 所在目录（管理式安装可能在子目录）
+          $soffice = Get-ChildItem -Path lo_src -Recurse -Filter soffice.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $soffice) { throw "未找到 soffice.exe，提取失败" }
+          $engineRoot = $soffice.Directory.Parent.FullName
+          Write-Host "engineRoot: $engineRoot"
+          Get-ChildItem -Path $engineRoot -Force | Out-File -FilePath engine_list.txt
+
+      - name: Assemble portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package | Out-Null
+          Copy-Item "dist\PDF处理工具.exe" "package\"
+          $soffice = Get-ChildItem -Path lo_src -Recurse -Filter soffice.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          $engineRoot = $soffice.Directory.Parent.FullName
+          Copy-Item -Path $engineRoot -Destination "package\libreoffice" -Recurse -Force
+          @"
+PDF 处理工具 - 完整便携版（Win7 及以上）
+
+使用方法：
+  1. 把本文件夹整体解压/复制到任意位置（例如 D:\PDF工具）
+  2. 双击 PDF处理工具.exe 即可使用，无需安装任何软件
+
+说明：
+  - 已内置 LibreOffice 转换引擎（libreoffice 文件夹），
+    doc/docx 转 PDF 开箱即用，不依赖 Office / WPS。
+  - 拆分/合并/删除页/转A4 为纯内置功能，亦不依赖外部软件。
+  - 如系统提示“缺少运行库”，请安装微软常用运行库或确认已打
+    系统更新 KB2999226（常见于未更新的 Windows 7）。
+"@ | Out-File -FilePath "package\使用说明.txt" -Encoding UTF8
+
+      - name: Zip package
+        shell: pwsh
+        run: |
+          $zip = "PDF处理工具-完整便携版-win7.zip"
+          $ok = $false
+          if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
+            & tar.exe -c -f $zip --format zip -C package . 2>$null
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $zip)) { $ok = $true }
+          }
+          if (-not $ok) {
+            Write-Host "tar 不可用，改用 Compress-Archive"
+            Compress-Archive -Path package\* -DestinationPath $zip
+          }
+          if (-not (Test-Path $zip)) { throw "打包失败：未生成 zip" }
+          Write-Host "zip size: $((Get-Item $zip).Length / 1MB) MB"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF处理工具-完整便携版-win7
+          path: PDF处理工具-完整便携版-win7.zip
+          if-no-files-found: error
