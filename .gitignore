@@ -9,3 +9,4 @@ dist_mac/
 .pyinstaller_cache/
 *.exe
 *.dmg
+a4.sh
