@@ -34,19 +34,22 @@ jobs:
         shell: bash
         run: python -m PyInstaller --noconfirm --clean pdf_tool_win7.spec
 
-      - name: Download LibreOffice MSI (portable engine)
+      - name: Download LibreOffice MSI (portable engine, Win7-compatible)
         shell: pwsh
         run: |
-          $msi = "LibreOffice_26.2.6_Win_x86-64.msi"
-          $url = "https://download.documentfoundation.org/libreoffice/stable/26.2.6/win/x86_64/$msi"
+          # 注意：LibreOffice 25.2+ 已不支持 Windows 7/8，
+          # 便携包面向 Win7，固定使用最后一个支持 Win7 的 24.8.7.2
+          $ver = "24.8.7.2"
+          $msi = "LibreOffice_${ver}_Win_x86-64.msi"
+          $url = "https://downloadarchive.documentfoundation.org/libreoffice/old/$ver/win/x86_64/$msi"
           Invoke-WebRequest -Uri $url -OutFile $msi
-          Write-Host "MSI size: $((Get-Item $msi).Length / 1MB) MB"
+          Write-Host "MSI size: $([math]::Round((Get-Item $msi).Length / 1MB, 1)) MB"
 
       - name: Extract LibreOffice (administrative install, no registry install)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path lo_src | Out-Null
-          Start-Process msiexec.exe -ArgumentList @("/a", "$((Get-Location).Path)\LibreOffice_26.2.6_Win_x86-64.msi", "/qn", "TARGETDIR=$((Get-Location).Path)\lo_src") -Wait
+          Start-Process msiexec.exe -ArgumentList @("/a", "$((Get-Location).Path)\LibreOffice_24.8.7.2_Win_x86-64.msi", "/qn", "TARGETDIR=$((Get-Location).Path)\lo_src") -Wait
           # 定位 program\soffice.exe 所在目录（管理式安装可能在子目录）
           $soffice = Get-ChildItem -Path lo_src -Recurse -Filter soffice.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $soffice) { throw "未找到 soffice.exe，提取失败" }
